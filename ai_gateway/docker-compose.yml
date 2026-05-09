@@ -68,6 +68,19 @@ services:
     networks:
       - gateway_net
 
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: ai_gateway_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - app
+    networks:
+      - gateway_net
+
 volumes:
   pgdata:
   redisdata:
