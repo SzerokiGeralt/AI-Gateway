@@ -2,10 +2,12 @@ name: ai_gateway
 
 services:
   app:
-    build: .
+    build:
+      context: ./ai_gateway
+      dockerfile: Dockerfile
     container_name: ai_gateway_app
     restart: unless-stopped
-    env_file: .env
+    env_file: ./ai_gateway/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-gateway}:${POSTGRES_PASSWORD:-gateway_secret_change_me}@db:5432/${POSTGRES_DB:-ai_gateway}
       REDIS_URL: redis://redis:6379/0
@@ -61,7 +63,7 @@ services:
     restart: unless-stopped
     volumes:
       - ollama_models:/root/.ollama
-      - ./scripts/ollama-entrypoint.sh:/entrypoint.sh:ro
+      - ./ai_gateway/scripts/ollama-entrypoint.sh:/entrypoint.sh:ro
     environment:
       OLLAMA_MODEL_NAME: ${OLLAMA_MODEL_NAME:-llama3.1:8b}
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
@@ -70,7 +72,7 @@ services:
 
   frontend:
     build:
-      context: ../frontend
+      context: frontend
       dockerfile: Dockerfile
     container_name: ai_gateway_frontend
     restart: unless-stopped
