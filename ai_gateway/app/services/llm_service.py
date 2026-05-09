@@ -32,23 +32,25 @@ def _to_sse(text: str) -> str:
 
 async def stream_response(
     messages: List[Dict[str, str]],
+    system_prompt: str | None = None,  # <--- NOWY PARAMETR
 ) -> AsyncGenerator[str, None]:
     """
     Strumieniuje odpowiedź modelu Anthropic Claude jako SSE.
-
-    Format eventu zgodnie ze spec:
-      data: {delta}\n\n
-    Zakończony:
-      data: [DONE]\n\n
     """
     client = _get_client()
 
     try:
-        async with client.messages.stream(
-            model=settings.ANTHROPIC_MODEL_NAME,
-            max_tokens=4096,
-            messages=messages,
-        ) as stream:
+        # Przygotowujemy słownik argumentów
+        kwargs = {
+            "model": settings.ANTHROPIC_MODEL_NAME,
+            "max_tokens": 4096,
+            "messages": messages,
+        }
+        # Jeśli przekazaliśmy notatkę systemową, dodajemy ją do API
+        if system_prompt:
+            kwargs["system"] = system_prompt
+
+        async with client.messages.stream(**kwargs) as stream:
             async for text in stream.text_stream:
                 if text:
                     yield _to_sse(text)

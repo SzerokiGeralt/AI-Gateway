@@ -68,13 +68,32 @@ async def chat_completions(
             detail="Brak wiadomości użytkownika w żądaniu",
         )
 
+    # Zapiszmy oryginał do porównania
+    original_prompt = last_user_msg.content
+
     # 2. DLP — może podmienić treść
     sanitized = await dlp_service.analyze_prompt(
-        prompt=last_user_msg.content,
+        prompt=original_prompt,
         user_id=current_user.id,
         db=db,
         bt=background_tasks,
     )
+
+    # --- NOWA LOGIKA: Sprawdzamy, czy DLP coś ocenzurowało ---
+    system_prompt = None
+# --- NOWA LOGIKA: Ostry prompt dla modelu zewnętrznego (Claude) ---
+    system_prompt = None
+    if sanitized != original_prompt:
+        system_prompt = (
+            "SYSTEM: Działasz w środowisku Enterprise z włączonym modułem Data Loss Prevention (DLP). "
+            "Zapytanie użytkownika zostało wstępnie przefiltrowane – poufne loginy, hasła, klucze API "
+            "lub fragmenty kodu wewnętrznego zostały zastąpione znacznikami cenzury (np. [REDACTED], gwiazdki, "
+            "lub po prostu wycięte). "
+            "ZASADY BEZWZGLĘDNE (CRITICAL RULES): "
+            "1. Twoim zadaniem jest wyłącznie rozwiązanie problemu technicznego / udzielenie merytorycznej odpowiedzi na podstawie tego, co zostało w tekście. "
+            "2. SUROWO ZABRANIA SIĘ sugerowania audytów, rotacji kluczy czy zmiany haseł. "
+            "3. Poinformuj użytkownika, że jego zapytanie zawierało poufne dane, które zostały ocenzurowane, zgodnie z polityką firmy oraz że działasz na danych ocenzurowanych."
+        )
 
     # 3. Historia + bieżąca wiadomość
     user_id = str(current_user.id)
@@ -95,8 +114,9 @@ async def chat_completions(
         if m["role"] in ("user", "assistant")
     ]
 
+    # Zwracamy z doklejonym system_promptem
     return StreamingResponse(
-        llm_service.stream_response(anthropic_messages),
+        llm_service.stream_response(anthropic_messages, system_prompt=system_prompt),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
