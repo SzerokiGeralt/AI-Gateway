@@ -1,6 +1,4 @@
 """Endpoint /chat/completions — przepływ DLP → Anthropic → SSE."""
-from __future__ import annotations
-
 import json
 import logging
 from typing import List
@@ -51,7 +49,7 @@ async def chat_completions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     r: redis_async.Redis = Depends(get_redis),
-) -> StreamingResponse:
+):
     """
     Przepływ:
       1. Wyciągnij ostatnią wiadomość user.
@@ -59,8 +57,6 @@ async def chat_completions(
       3. Wczytaj historię z Redis, dołącz nową wiadomość.
       4. Strumieniuj odpowiedź z Anthropic w SSE.
     """
-    # Rate limit (nakładany dekoratorem slowapi w main.py — tu jest czysty handler)
-
     # 1. Ostatnia wiadomość użytkownika
     last_user_msg = next(
         (m for m in reversed(payload.messages) if m.role == "user"),
@@ -84,19 +80,15 @@ async def chat_completions(
     user_id = str(current_user.id)
     history = await _load_history(r, user_id)
 
-    # Dołącz całe wejściowe `messages` (z podmienioną treścią ostatniej user-msg)
     incoming = [m.model_dump() for m in payload.messages]
-    # Podmień content ostatniej user-msg na sanitized
     for msg in reversed(incoming):
         if msg["role"] == "user":
             msg["content"] = sanitized
             break
 
-    # Zapisz historię (po stronie serwera śledzimy ostatnie 20)
     await _save_history(r, user_id, history + incoming)
 
     # 4. Streaming
-    # Anthropic wymaga roli user/assistant — system messages obsługujemy osobno
     anthropic_messages = [
         {"role": m["role"], "content": m["content"]}
         for m in incoming
