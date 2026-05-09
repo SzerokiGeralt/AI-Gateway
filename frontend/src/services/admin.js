@@ -16,6 +16,9 @@ export const adminApi = {
   getIncidents: (skip = 0, limit = 100) =>
     api.get('/admin/incidents', { params: { skip, limit } }).then(r => r.data),
 
+  deleteIncident: (incidentId) =>
+    api.delete(`/admin/incidents/${incidentId}`),
+
   getPolicy: () =>
     api.get('/admin/policy').then(r => r.data).catch(err => {
       if (err.response?.status === 404) return null
