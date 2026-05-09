@@ -58,8 +58,12 @@ Format odpowiedzi (wszystkie pola są wymagane):
 Przykład odpowiedzi gdy BEZPIECZNY:
 {{"is_safe": true, "reason": "Brak naruszeń", "sanitized_text": ""}}
 
-Przykład odpowiedzi gdy NIEBEZPIECZNY (prompt zawierał np. PESEL 80101012345):
-{{"is_safe": false, "reason": "Prompt zawiera numer PESEL.", "sanitized_text": "Zredaguj maila. Dane klienta: Jan Nowak, PESEL [ZREDAGOWANO], konto [ZREDAGOWANO]."}}
+Zasady:
+- is_safe=true gdy prompt zgodny z polityką — wtedy sanitized_text może być pusty.
+- is_safe=false gdy prompt narusza politykę — wtedy w sanitized_text zwróć wersję
+  pozbawioną elementów naruszających (np. zamaskuj dane wrażliwe, usuń poufne fragmenty),
+  zachowując sens ogólny pytania.
+- reason: krótkie wyjaśnienie po polsku (1 zdanie) nie przepisuj.
 
 POLITYKA FIRMY:
 {policy_content}
