@@ -5,7 +5,12 @@
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(Sort-Object)",
       "Bash(docker compose *)",
-      "Bash(docker exec *)"
+      "Bash(docker exec *)",
+      "Bash(xargs grep -l \"DLP\\\\|ollama\\\\|sanitize\")",
+      "Bash(docker-compose logs *)",
+      "Bash(findstr /i \"SMTP\")",
+      "Bash(Get-Content .env)",
+      "Bash(Select-String \"SMTP\")"
     ]
   }
 }

@@ -68,23 +68,47 @@ async def chat_completions(
             detail="Brak wiadomości użytkownika w żądaniu",
         )
 
-    # 2. DLP — może podmienić treść
-    sanitized = await dlp_service.analyze_prompt(
+    # 2. DLP — sprawdź czy prompt jest bezpieczny
+    # Pobierz adres email skonfigurowany przez admina w panelu (Redis), fallback na .env
+    smtp_to = await r.get("config:smtp_to") or None
+
+    dlp = await dlp_service.analyze_prompt(
         prompt=last_user_msg.content,
         user_id=current_user.id,
         db=db,
         bt=background_tasks,
+        smtp_to=smtp_to,
     )
+
+    if dlp.is_blocked:
+        # Zwróć użytkownikowi komunikat o blokadzie — bez wywoływania Claude
+        block_msg = (
+            "Twoja wiadomość została zablokowana przez system bezpieczeństwa (DLP) "
+            "i nie została wysłana do asystenta.\n\n"
+            f"**Powód:** {dlp.reason}\n\n"
+            "Usuń z wiadomości dane poufne (dane osobowe, klucze API, hasła, "
+            "kod źródłowy oznaczony jako tajny itp.) i spróbuj ponownie."
+        )
+
+        async def _blocked_stream():
+            yield f"data: {block_msg}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            _blocked_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )
 
     # 3. Historia + bieżąca wiadomość
     user_id = str(current_user.id)
     history = await _load_history(r, user_id)
 
     incoming = [m.model_dump() for m in payload.messages]
-    for msg in reversed(incoming):
-        if msg["role"] == "user":
-            msg["content"] = sanitized
-            break
 
     await _save_history(r, user_id, history + incoming)
 
