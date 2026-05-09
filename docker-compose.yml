@@ -3,7 +3,7 @@ name: ai_gateway
 services:
   app:
     build:
-      context: ./ai_gateway
+      context: ai_gateway
       dockerfile: Dockerfile
     container_name: ai_gateway_app
     restart: unless-stopped
