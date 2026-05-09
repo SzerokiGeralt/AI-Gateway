@@ -46,7 +46,7 @@ Zasady:
 - is_safe=false gdy prompt narusza politykę — wtedy w sanitized_text zwróć wersję
   pozbawioną elementów naruszających (np. zamaskuj dane wrażliwe, usuń poufne fragmenty),
   zachowując sens ogólny pytania.
-- reason: krótkie wyjaśnienie po polsku (1-2 zdania).
+- reason: krótkie wyjaśnienie po polsku (1 zdanie) nie przepisuj.
 
 POLITYKA FIRMY:
 {policy_content}
