@@ -636,6 +636,7 @@ function PolicyPanel() {
 
 function EmailConfigPanel() {
   const [email, setEmail] = useState('')
+  const [currentEmail, setCurrentEmail] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -643,7 +644,11 @@ function EmailConfigPanel() {
 
   useEffect(() => {
     adminApi.getSmtpTo()
-      .then(data => setEmail(data.smtp_to || ''))
+      .then(data => {
+        const value = data.smtp_to || ''
+        setEmail(value)
+        setCurrentEmail(value)
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
@@ -655,6 +660,7 @@ function EmailConfigPanel() {
     setError('')
     try {
       await adminApi.setSmtpTo(email)
+      setCurrentEmail(email)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 4000)
     } catch (err) {
@@ -686,6 +692,15 @@ function EmailConfigPanel() {
         ) : (
           <form onSubmit={handleSave} className="space-y-4">
             <div>
+              <div className="mb-2">
+                {currentEmail ? (
+                  <p className="text-xs text-gray-400">
+                    Aktualnie ustawiony: <span className="text-white font-medium">{currentEmail}</span>
+                  </p>
+                ) : (
+                  <p className="text-xs text-red-400">Nie ustawiono jeszcze żadnego maila</p>
+                )}
+              </div>
               <label className="block text-xs text-gray-400 mb-1.5">Adres email odbiorcy alertów DLP</label>
               <input
                 type="email"
