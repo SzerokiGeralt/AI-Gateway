@@ -41,15 +41,34 @@ async def send_alert(
     )
 
     try:
-        await aiosmtplib.send(
-            msg,
+        send_kwargs: dict = dict(
             hostname=settings.SMTP_HOST,
             port=settings.SMTP_PORT,
             username=settings.SMTP_USER or None,
             password=settings.SMTP_PASSWORD or None,
-            start_tls=settings.SMTP_USE_TLS,
             timeout=15,
         )
+        # SMTP_USE_SSL=True → SSL bezpośrednie (port 465)
+        # SMTP_USE_TLS=True → STARTTLS (port 587)
+        if settings.SMTP_USE_SSL:
+            send_kwargs["use_tls"] = True
+        elif settings.SMTP_USE_TLS:
+            send_kwargs["start_tls"] = True
+
+        logger.debug(
+            "SMTP próba połączenia: host=%s port=%d user=%s ssl=%s tls=%s",
+            settings.SMTP_HOST,
+            settings.SMTP_PORT,
+            settings.SMTP_USER or "(brak)",
+            settings.SMTP_USE_SSL,
+            settings.SMTP_USE_TLS,
+        )
+        await aiosmtplib.send(msg, **send_kwargs)
         logger.info("Wysłano alert email dla incydentu %s", incident_id)
     except Exception as exc:  # noqa: BLE001
-        logger.error("Nie udało się wysłać alertu email: %s", exc)
+        logger.error(
+            "Nie udało się wysłać alertu email dla incydentu %s: %s — %r",
+            incident_id,
+            type(exc).__name__,
+            str(exc),
+        )
