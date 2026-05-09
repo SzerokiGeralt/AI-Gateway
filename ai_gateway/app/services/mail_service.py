@@ -11,18 +11,25 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-async def send_alert(incident_id: str, user_id: str, reason: str) -> None:
+async def send_alert(
+    incident_id: str,
+    user_id: str,
+    reason: str,
+    smtp_to_override: str | None = None,
+) -> None:
     """
     Wysyła krótki email-alert do zespołu bezpieczeństwa.
     NIE zawiera oryginalnego promptu — tylko ID incydentu i powód.
+    smtp_to_override — adres ustawiony przez admina w UI (z Redis); fallback na settings.SMTP_TO.
     """
-    if not settings.SMTP_HOST or not settings.SMTP_TO:
+    smtp_to = smtp_to_override or settings.SMTP_TO
+    if not settings.SMTP_HOST or not smtp_to:
         logger.warning("SMTP nieskonfigurowane — pomijam wysyłkę alertu %s", incident_id)
         return
 
     msg = EmailMessage()
     msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
-    msg["To"] = settings.SMTP_TO
+    msg["To"] = smtp_to
     msg["Subject"] = f"[AI Gateway] Incydent DLP {incident_id}"
     msg.set_content(
         "Wykryto naruszenie polityki DLP.\n\n"

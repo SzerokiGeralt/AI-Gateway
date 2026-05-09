@@ -12,6 +12,7 @@ import logging
 from typing import Any, Dict
 from uuid import UUID
 
+import redis.asyncio as redis_async
 from fastapi import BackgroundTasks
 from ollama import AsyncClient
 from pydantic import ValidationError
@@ -115,6 +116,7 @@ async def analyze_prompt(
     user_id: UUID,
     db: AsyncSession,
     bt: BackgroundTasks,
+    r: redis_async.Redis | None = None,
 ) -> str:
     """
     Główna funkcja warstwy DLP.
@@ -162,11 +164,16 @@ async def analyze_prompt(
     # NIE logujemy oryginalnego promptu — tylko ID
     logger.info("DLP: zarejestrowano incydent id=%s", incident.id)
 
+    smtp_to_override: str | None = None
+    if r is not None:
+        smtp_to_override = await r.get("config:smtp_to")
+
     bt.add_task(
         mail_service.send_alert,
         incident_id=str(incident.id),
         user_id=str(user_id),
         reason=dlp_result.reason or "Brak uzasadnienia",
+        smtp_to_override=smtp_to_override,
     )
 
     return sanitized

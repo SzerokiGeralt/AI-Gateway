@@ -16,6 +16,12 @@ export const adminApi = {
   getIncidents: (skip = 0, limit = 100) =>
     api.get('/admin/incidents', { params: { skip, limit } }).then(r => r.data),
 
+  getPolicy: () =>
+    api.get('/admin/policy').then(r => r.data).catch(err => {
+      if (err.response?.status === 404) return null
+      throw err
+    }),
+
   uploadPolicy: (file) => {
     const form = new FormData()
     form.append('file', file)
@@ -23,4 +29,10 @@ export const adminApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data)
   },
+
+  getSmtpTo: () =>
+    api.get('/admin/config/smtp-to').then(r => r.data),
+
+  setSmtpTo: (smtp_to) =>
+    api.put('/admin/config/smtp-to', { smtp_to }).then(r => r.data),
 }

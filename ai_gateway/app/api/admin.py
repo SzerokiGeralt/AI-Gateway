@@ -2,6 +2,7 @@
 from typing import List
 from uuid import UUID
 
+import redis.asyncio as redis_async
 from fastapi import (
     APIRouter,
     Depends,
@@ -16,7 +17,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db, require_admin
+from app.core.config import settings
+from app.core.dependencies import get_db, get_redis, require_admin
 from app.core.security import hash_password
 from app.models.incident import SecurityIncident
 from app.models.policy import CompanyPolicy
@@ -24,6 +26,8 @@ from app.models.user import User, UserRole
 from app.schemas.admin import (
     IncidentOut,
     PolicyOut,
+    SmtpToConfig,
+    SmtpToResponse,
     UserCreate,
     UserOut,
     UserUpdate,
@@ -117,8 +121,21 @@ async def delete_user(
 
 
 # ============================================================
-# Policy upload
+# Policy
 # ============================================================
+@router.get("/policy", response_model=PolicyOut)
+async def get_current_policy(
+    db: AsyncSession = Depends(get_db),
+) -> CompanyPolicy:
+    result = await db.execute(
+        select(CompanyPolicy).order_by(CompanyPolicy.updated_at.desc()).limit(1)
+    )
+    policy = result.scalar_one_or_none()
+    if policy is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brak polityki")
+    return policy
+
+
 @router.post("/policy", response_model=PolicyOut, status_code=status.HTTP_201_CREATED)
 async def upload_policy(
     file: UploadFile = File(...),
@@ -155,6 +172,32 @@ async def upload_policy(
     await db.commit()
     await db.refresh(policy)
     return policy
+
+
+# ============================================================
+# SMTP config (recipient email stored in Redis)
+# ============================================================
+_SMTP_TO_KEY = "config:smtp_to"
+
+
+@router.get("/config/smtp-to", response_model=SmtpToResponse)
+async def get_smtp_to(
+    r: redis_async.Redis = Depends(get_redis),
+) -> SmtpToResponse:
+    value = await r.get(_SMTP_TO_KEY)
+    return SmtpToResponse(smtp_to=value or settings.SMTP_TO or "")
+
+
+@router.put("/config/smtp-to", response_model=SmtpToResponse)
+async def set_smtp_to(
+    payload: SmtpToConfig,
+    r: redis_async.Redis = Depends(get_redis),
+) -> SmtpToResponse:
+    if payload.smtp_to:
+        await r.set(_SMTP_TO_KEY, payload.smtp_to)
+    else:
+        await r.delete(_SMTP_TO_KEY)
+    return SmtpToResponse(smtp_to=payload.smtp_to)
 
 
 # ============================================================

@@ -147,7 +147,11 @@ function UsersPanel({ currentUser }) {
       load()
     } catch (err) {
       const detail = err?.response?.data?.detail
-      setFormError(typeof detail === 'string' ? detail : 'Błąd podczas tworzenia użytkownika.')
+      if (Array.isArray(detail)) {
+        setFormError(detail.map(d => d.msg).join(', '))
+      } else {
+        setFormError(typeof detail === 'string' ? detail : 'Błąd podczas tworzenia użytkownika.')
+      }
     } finally {
       setFormLoading(false)
     }
@@ -455,6 +459,13 @@ function PolicyPanel() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
+  const [currentPolicy, setCurrentPolicy] = useState(undefined) // undefined = loading
+
+  useEffect(() => {
+    adminApi.getPolicy()
+      .then(data => setCurrentPolicy(data))
+      .catch(() => setCurrentPolicy(null))
+  }, [])
 
   const handleUpload = async (e) => {
     e.preventDefault()
@@ -465,6 +476,7 @@ function PolicyPanel() {
     try {
       const data = await adminApi.uploadPolicy(file)
       setResult(data)
+      setCurrentPolicy(data)
       setFile(null)
     } catch (err) {
       setError(err?.response?.data?.detail || 'Błąd podczas przesyłania pliku.')
@@ -479,6 +491,33 @@ function PolicyPanel() {
         <h2 className="text-lg font-semibold text-white">Polityka DLP</h2>
         <p className="text-sm text-gray-500 mt-0.5">Prześlij plik .txt z polityką firmową dla filtra DLP.</p>
       </div>
+
+      {/* Status aktualnej polityki */}
+      <div className="mb-5">
+        {currentPolicy === undefined ? (
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <Spinner />
+            <span>Sprawdzanie statusu polityki…</span>
+          </div>
+        ) : currentPolicy ? (
+          <div className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-2">
+            <svg className="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm text-green-400">
+              Ostatnia aktualizacja: <span className="font-semibold">{fmtDate(currentPolicy.updated_at)}</span>
+            </span>
+          </div>
+        ) : (
+          <div className="inline-flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-2">
+            <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+            <span className="text-sm text-amber-400">Polityka nie została jeszcze ustalona</span>
+          </div>
+        )}
+      </div>
+
       <div className="max-w-lg">
         <form onSubmit={handleUpload} className="space-y-4">
           <div
@@ -529,12 +568,110 @@ function PolicyPanel() {
   )
 }
 
+// ─── Email Config Panel ────────────────────────────────────────────────────────
+
+function EmailConfigPanel() {
+  const [email, setEmail] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    adminApi.getSmtpTo()
+      .then(data => setEmail(data.smtp_to || ''))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    setSuccess(false)
+    setError('')
+    try {
+      await adminApi.setSmtpTo(email)
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 4000)
+    } catch (err) {
+      const detail = err?.response?.data?.detail
+      if (Array.isArray(detail)) {
+        setError(detail.map(d => d.msg).join(', '))
+      } else {
+        setError(typeof detail === 'string' ? detail : 'Błąd podczas zapisywania.')
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputCls = `w-full bg-[#212121] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white
+    placeholder-gray-500 focus:outline-none focus:border-white/30 transition-colors`
+
+  return (
+    <div>
+      <div className="mb-5">
+        <h2 className="text-lg font-semibold text-white">Konfiguracja poczty</h2>
+        <p className="text-sm text-gray-500 mt-0.5">
+          Adres email odbiorcy powiadomień o incydentach DLP. Nadpisuje domyślny adres z konfiguracji serwera.
+        </p>
+      </div>
+      <div className="max-w-lg">
+        {loading ? (
+          <div className="flex justify-center py-10"><Spinner /></div>
+        ) : (
+          <form onSubmit={handleSave} className="space-y-4">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1.5">Adres email odbiorcy alertów DLP</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={e => { setEmail(e.target.value); setSuccess(false) }}
+                className={inputCls}
+                placeholder="security@firma.pl"
+              />
+              <p className="mt-1.5 text-xs text-gray-600">
+                Na ten adres wysyłane są powiadomienia o każdym wykrytym naruszeniu polityki.
+              </p>
+            </div>
+
+            {success && (
+              <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-2.5 text-sm text-green-400">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Adres email zapisany pomyślnie.
+              </div>
+            )}
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-sm text-red-400">
+                {error}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex items-center gap-2 bg-white text-[#212121] font-semibold text-sm rounded-lg px-5 py-2.5
+                         hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving && <Spinner />}
+              Zapisz adres
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Admin Page ────────────────────────────────────────────────────────────────
 
 const TABS = [
   { id: 'users', label: 'Użytkownicy', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
   { id: 'incidents', label: 'Incydenty DLP', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' },
   { id: 'policy', label: 'Polityka DLP', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+  { id: 'email', label: 'Konfiguracja poczty', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
 ]
 
 export default function Admin() {
@@ -608,6 +745,7 @@ export default function Admin() {
         {tab === 'users' && <UsersPanel currentUser={user} />}
         {tab === 'incidents' && <IncidentsPanel />}
         {tab === 'policy' && <PolicyPanel />}
+        {tab === 'email' && <EmailConfigPanel />}
       </main>
     </div>
   )

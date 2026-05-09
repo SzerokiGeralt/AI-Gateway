@@ -49,3 +49,11 @@ class PolicyOut(BaseModel):
     content: str
     uploaded_by: Optional[UUID] = None
     updated_at: datetime
+
+
+class SmtpToConfig(BaseModel):
+    smtp_to: str = Field(default="", max_length=254)
+
+
+class SmtpToResponse(BaseModel):
+    smtp_to: str
