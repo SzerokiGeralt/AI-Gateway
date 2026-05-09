@@ -75,7 +75,7 @@ function Message({ msg, isStreaming }) {
 
 function EmptyState() {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
+    <div className="flex flex-col items-center justify-center text-center px-4">
       <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mb-4">
         <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -90,68 +90,6 @@ function EmptyState() {
   )
 }
 
-function DlpModal({ result, onClose }) {
-  if (!result) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
-      <div
-        className="bg-[#1e1e1e] border border-white/10 rounded-2xl max-w-2xl w-full p-6 shadow-2xl max-h-[80vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            {result.is_safe ? (
-              <span className="text-green-400">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              </span>
-            ) : (
-              <span className="text-amber-400">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </span>
-            )}
-            <h2 className="text-white font-semibold text-base">
-              Analiza DLP: {result.filename}
-            </h2>
-          </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div className={`mb-4 px-4 py-3 rounded-lg text-sm ${result.is_safe ? 'bg-green-500/10 text-green-300 border border-green-500/20' : 'bg-amber-500/10 text-amber-300 border border-amber-500/20'}`}>
-          {result.is_safe
-            ? 'Dokument jest bezpieczny — brak naruszeń polityki DLP.'
-            : 'Wykryto potencjalne naruszenia polityki DLP. Poniżej znajduje się ocenzurowana wersja dokumentu.'}
-        </div>
-
-        {!result.is_safe && result.sanitized_text && (
-          <div className="flex-1 overflow-y-auto">
-            <p className="text-xs text-gray-500 mb-2">Oczyszczony tekst dokumentu:</p>
-            <pre className="bg-[#111] border border-white/10 rounded-lg p-4 text-sm text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
-              {result.sanitized_text}
-            </pre>
-          </div>
-        )}
-
-        <div className="mt-4 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm rounded-lg bg-white/10 text-white hover:bg-white/20 transition-colors"
-          >
-            Zamknij
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function Chat() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -159,11 +97,8 @@ export default function Chat() {
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState('')
-  const [dlpResult, setDlpResult] = useState(null)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
-  const fileInputRef = useRef(null)
   const abortRef = useRef(false)
 
   useEffect(() => {
@@ -234,47 +169,8 @@ export default function Chat() {
     el.style.height = Math.min(el.scrollHeight, 200) + 'px'
   }
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    setIsAnalyzing(true)
-    setError('')
-    try {
-      const token = localStorage.getItem('token')
-      const formData = new FormData()
-      formData.append('file', file)
-      const res = await fetch('/api/chat/analyze-file', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.detail || `Błąd HTTP ${res.status}`)
-      }
-      const data = await res.json()
-      setDlpResult(data)
-    } catch (err) {
-      setError(err.message || 'Nie udało się przeanalizować pliku.')
-    } finally {
-      setIsAnalyzing(false)
-    }
-  }
-
   return (
     <div className="flex h-screen bg-[#212121] overflow-hidden">
-      <DlpModal result={dlpResult} onClose={() => setDlpResult(null)} />
-
-      {/* Ukryty input pliku */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        className="hidden"
-        onChange={handleFileUpload}
-      />
-
       {/* Sidebar */}
       <aside className="w-64 bg-[#171717] flex flex-col flex-shrink-0">
         <div className="p-3">
@@ -340,12 +236,15 @@ export default function Chat() {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        {messages.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <EmptyState />
+          </div>
+        )}
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
-          {messages.length === 0 ? (
-            <EmptyState />
-          ) : (
+          {messages.length > 0 && (
             <div>
               {messages.map((msg, i) => (
                 <Message
@@ -385,24 +284,6 @@ export default function Chat() {
                            focus:outline-none disabled:opacity-50"
                 style={{ maxHeight: '200px', overflowY: 'auto' }}
               />
-              {/* Przycisk DLP — sprawdź plik */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isStreaming || isAnalyzing}
-                title="Sprawdź plik PDF lub Word przez DLP"
-                className="absolute right-12 bottom-3 w-8 h-8 flex items-center justify-center
-                           rounded-lg text-gray-400 hover:text-white hover:bg-white/10
-                           disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {isAnalyzing ? (
-                  <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                  </svg>
-                )}
-              </button>
               {/* Przycisk wyślij */}
               <button
                 onClick={handleSend}
@@ -421,7 +302,7 @@ export default function Chat() {
               </button>
             </div>
             <p className="text-center text-xs text-gray-600 mt-2">
-              Wiadomości są filtrowane przez DLP. Shift+Enter = nowa linia. Spinką możesz sprawdzić plik PDF/DOCX.
+              Wiadomości są filtrowane przez DLP. Shift+Enter = nowa linia.
             </p>
           </div>
         </div>
