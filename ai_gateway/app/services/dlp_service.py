@@ -169,7 +169,7 @@ async def analyze_prompt(
         reason=dlp_result.reason or "Brak uzasadnienia",
     )
 
-    # --- NOWOŚĆ: Notatka systemowa dla modelu Claude ---
+    #Notatka systemowa dla modelu Claude ---
     system_appendix = (
         "\n\n[NOTATKA SYSTEMOWA DLP: Powyższa wiadomość użytkownika zawierała dane poufne "
         "(np. dane osobowe, klucze API, kod źródłowy), które zostały automatycznie "
@@ -178,6 +178,10 @@ async def analyze_prompt(
         "że jego wiadomość została ocenzurowana ze względów bezpieczeństwa, "
         "a następnie postaraj się odpowiedzieć na jego pytanie najlepiej jak potrafisz "
         "na podstawie pozostałego, bezpiecznego kontekstu.]"
+        "na podstawie pozostałego, bezpiecznego kontekstu. Nie spekuluj na temat usuniętych fragmentów, "
+        "skup się na tym, co jest dostępne. Nie panikuj, jeśli wiadomość jest niekompletna — po prostu daj "
+        "użytkownikowi znać, że część informacji została usunięta ze względów bezpieczeństwa, "
+        "i postaraj się pomóc najlepiej jak potrafisz z tym, co zostało zachowane.]"
     )
 
     return sanitized + system_appendix

@@ -74,7 +74,6 @@ async def chat_completions(
         user_id=current_user.id,
         db=db,
         bt=background_tasks,
-        r=r,
     )
 
     # 3. Historia + bieżąca wiadomość
