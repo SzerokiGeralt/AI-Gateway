@@ -1,0 +1,78 @@
+name: ai_gateway
+
+services:
+  app:
+    build: .
+    container_name: ai_gateway_app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-gateway}:${POSTGRES_PASSWORD:-gateway_secret_change_me}@db:5432/${POSTGRES_DB:-ai_gateway}
+      REDIS_URL: redis://redis:6379/0
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    networks:
+      - gateway_net
+
+  db:
+    image: postgres:16-alpine
+    container_name: ai_gateway_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gateway}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gateway_secret_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_gateway}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gateway} -d ${POSTGRES_DB:-ai_gateway}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gateway_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai_gateway_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gateway_net
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai_gateway_ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+      - ./scripts/ollama-entrypoint.sh:/entrypoint.sh:ro
+    environment:
+      OLLAMA_MODEL_NAME: ${OLLAMA_MODEL_NAME:-llama3.1:8b}
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    networks:
+      - gateway_net
+
+volumes:
+  pgdata:
+  redisdata:
+  ollama_models:
+
+networks:
+  gateway_net:
+    driver: bridge

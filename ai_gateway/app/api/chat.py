@@ -1,0 +1,114 @@
+"""Endpoint /chat/completions — przepływ DLP → Anthropic → SSE."""
+from __future__ import annotations
+
+import json
+import logging
+from typing import List
+
+import redis.asyncio as redis_async
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.core.dependencies import get_current_user, get_db, get_redis
+from app.core.rate_limit import limiter
+from app.models.user import User
+from app.schemas.chat import ChatRequest
+from app.services import dlp_service, llm_service
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/chat", tags=["chat"])
+
+CHAT_HISTORY_LIMIT = 20  # max wiadomości na historię użytkownika
+
+
+async def _load_history(r: redis_async.Redis, user_id: str) -> List[dict]:
+    raw = await r.get(f"chat_history:{user_id}")
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return data
+    except json.JSONDecodeError:
+        pass
+    return []
+
+
+async def _save_history(r: redis_async.Redis, user_id: str, history: List[dict]) -> None:
+    trimmed = history[-CHAT_HISTORY_LIMIT:]
+    await r.set(f"chat_history:{user_id}", json.dumps(trimmed))
+
+
+@router.post("/completions")
+@limiter.limit(settings.CHAT_RATE_LIMIT)
+async def chat_completions(
+    request: Request,
+    payload: ChatRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    r: redis_async.Redis = Depends(get_redis),
+) -> StreamingResponse:
+    """
+    Przepływ:
+      1. Wyciągnij ostatnią wiadomość user.
+      2. Przepuść przez DLP (sanityzacja + log incydentów).
+      3. Wczytaj historię z Redis, dołącz nową wiadomość.
+      4. Strumieniuj odpowiedź z Anthropic w SSE.
+    """
+    # Rate limit (nakładany dekoratorem slowapi w main.py — tu jest czysty handler)
+
+    # 1. Ostatnia wiadomość użytkownika
+    last_user_msg = next(
+        (m for m in reversed(payload.messages) if m.role == "user"),
+        None,
+    )
+    if last_user_msg is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Brak wiadomości użytkownika w żądaniu",
+        )
+
+    # 2. DLP — może podmienić treść
+    sanitized = await dlp_service.analyze_prompt(
+        prompt=last_user_msg.content,
+        user_id=current_user.id,
+        db=db,
+        bt=background_tasks,
+    )
+
+    # 3. Historia + bieżąca wiadomość
+    user_id = str(current_user.id)
+    history = await _load_history(r, user_id)
+
+    # Dołącz całe wejściowe `messages` (z podmienioną treścią ostatniej user-msg)
+    incoming = [m.model_dump() for m in payload.messages]
+    # Podmień content ostatniej user-msg na sanitized
+    for msg in reversed(incoming):
+        if msg["role"] == "user":
+            msg["content"] = sanitized
+            break
+
+    # Zapisz historię (po stronie serwera śledzimy ostatnie 20)
+    await _save_history(r, user_id, history + incoming)
+
+    # 4. Streaming
+    # Anthropic wymaga roli user/assistant — system messages obsługujemy osobno
+    anthropic_messages = [
+        {"role": m["role"], "content": m["content"]}
+        for m in incoming
+        if m["role"] in ("user", "assistant")
+    ]
+
+    return StreamingResponse(
+        llm_service.stream_response(anthropic_messages),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
