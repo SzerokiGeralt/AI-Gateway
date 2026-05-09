@@ -216,3 +216,17 @@ async def list_incidents(
         .limit(limit)
     )
     return list(result.scalars().all())
+
+
+@router.delete("/incidents/{incident_id}")
+async def delete_incident(
+    incident_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    result = await db.execute(
+        delete(SecurityIncident).where(SecurityIncident.id == incident_id)
+    )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brak incydentu")
+    await db.commit()
+    return Response(status_code=204)
