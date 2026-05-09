@@ -1,11 +1,14 @@
 """Endpoint /chat/completions — przepływ DLP → Anthropic → SSE."""
+import io
 import json
 import logging
 from typing import List
 
 import redis.asyncio as redis_async
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from fastapi.responses import StreamingResponse
+from docx import Document
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi.responses import JSONResponse, StreamingResponse
+from pypdf import PdfReader
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -14,6 +17,12 @@ from app.core.rate_limit import limiter
 from app.models.user import User
 from app.schemas.chat import ChatRequest
 from app.services import dlp_service, llm_service
+
+ALLOWED_MIME = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +81,13 @@ async def chat_completions(
     original_prompt = last_user_msg.content
 
     # 2. DLP — może podmienić treść
+    smtp_to_override: str | None = await r.get("config:smtp_to")
     sanitized = await dlp_service.analyze_prompt(
         prompt=original_prompt,
         user_id=current_user.id,
         db=db,
         bt=background_tasks,
+        smtp_to_override=smtp_to_override or None,
     )
 
     # --- NOWA LOGIKA: Sprawdzamy, czy DLP coś ocenzurowało ---
@@ -124,3 +135,81 @@ async def chat_completions(
             "Connection": "keep-alive",
         },
     )
+
+
+def _extract_text_from_pdf(data: bytes) -> str:
+    reader = PdfReader(io.BytesIO(data))
+    parts = []
+    for page in reader.pages:
+        text = page.extract_text()
+        if text:
+            parts.append(text)
+    return "\n".join(parts)
+
+
+def _extract_text_from_docx(data: bytes) -> str:
+    doc = Document(io.BytesIO(data))
+    return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
+
+@router.post("/analyze-file")
+async def analyze_file(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    r: redis_async.Redis = Depends(get_redis),
+):
+    """Analizuje plik Word (.docx) lub PDF przez filtr DLP i zwraca wynik."""
+    content_type = file.content_type or ""
+    filename = file.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    if content_type not in ALLOWED_MIME and ext not in ("pdf", "docx"):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Obsługiwane formaty: PDF i DOCX.",
+        )
+
+    raw = await file.read()
+    if len(raw) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Plik przekracza limit 10 MB.",
+        )
+
+    try:
+        if ext == "pdf" or "pdf" in content_type:
+            text = _extract_text_from_pdf(raw)
+        else:
+            text = _extract_text_from_docx(raw)
+    except Exception as exc:
+        logger.warning("Nie udało się odczytać pliku %s: %s", filename, exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Nie udało się odczytać zawartości pliku.",
+        ) from exc
+
+    if not text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Plik nie zawiera tekstu do analizy.",
+        )
+
+    smtp_to_override: str | None = await r.get("config:smtp_to")
+    sanitized = await dlp_service.analyze_prompt(
+        prompt=text,
+        user_id=current_user.id,
+        db=db,
+        bt=background_tasks,
+        smtp_to_override=smtp_to_override or None,
+    )
+
+    is_safe = sanitized == text
+    return JSONResponse({
+        "filename": filename,
+        "is_safe": is_safe,
+        "sanitized_text": sanitized if not is_safe else None,
+        "char_count": len(text),
+    })

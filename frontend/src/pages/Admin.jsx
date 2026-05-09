@@ -523,7 +523,9 @@ function PolicyPanel() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
-  const [currentPolicy, setCurrentPolicy] = useState(undefined) // undefined = loading
+  const [currentPolicy, setCurrentPolicy] = useState(undefined)
+  const [showContent, setShowContent] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     adminApi.getPolicy()
@@ -542,10 +544,22 @@ function PolicyPanel() {
       setResult(data)
       setCurrentPolicy(data)
       setFile(null)
+      setShowContent(false)
     } catch (err) {
       setError(err?.response?.data?.detail || 'Błąd podczas przesyłania pliku.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      await adminApi.downloadPolicy()
+    } catch {
+      alert('Błąd podczas pobierania polityki.')
+    } finally {
+      setDownloading(false)
     }
   }
 
@@ -564,13 +578,41 @@ function PolicyPanel() {
             <span>Sprawdzanie statusu polityki…</span>
           </div>
         ) : currentPolicy ? (
-          <div className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-2">
-            <svg className="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-sm text-green-400">
-              Ostatnia aktualizacja: <span className="font-semibold">{fmtDate(currentPolicy.updated_at)}</span>
-            </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-2">
+              <svg className="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-sm text-green-400">
+                Ostatnia aktualizacja: <span className="font-semibold">{fmtDate(currentPolicy.updated_at)}</span>
+              </span>
+            </div>
+            <button
+              onClick={() => setShowContent(v => !v)}
+              className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors
+                         bg-white/5 border border-white/10 rounded-lg px-3 py-2 hover:bg-white/10"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              {showContent ? 'Ukryj treść' : 'Podgląd polityki'}
+            </button>
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors
+                         bg-white/5 border border-white/10 rounded-lg px-3 py-2 hover:bg-white/10
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {downloading ? <Spinner /> : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              )}
+              Pobierz .txt
+            </button>
           </div>
         ) : (
           <div className="inline-flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-2">
@@ -581,6 +623,17 @@ function PolicyPanel() {
           </div>
         )}
       </div>
+
+      {/* Podgląd treści polityki */}
+      {showContent && currentPolicy?.content && (
+        <div className="mb-6">
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Treść aktywnej polityki</p>
+          <pre className="bg-[#111] border border-white/10 rounded-xl p-4 text-sm text-gray-300
+                          whitespace-pre-wrap word-break break-word overflow-y-auto max-h-96 leading-relaxed font-mono">
+            {currentPolicy.content}
+          </pre>
+        </div>
+      )}
 
       <div className="max-w-lg">
         <form onSubmit={handleUpload} className="space-y-4">

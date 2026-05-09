@@ -148,6 +148,7 @@ async def analyze_prompt(
     user_id: UUID,
     db: AsyncSession,
     bt: BackgroundTasks,
+    smtp_to_override: str | None = None,
 ) -> str:
     """
     Główna funkcja warstwy DLP.
@@ -200,6 +201,7 @@ async def analyze_prompt(
         incident_id=str(incident.id),
         user_id=str(user_id),
         reason=dlp_result.reason or "Brak uzasadnienia",
+        smtp_to_override=smtp_to_override,
     )
 
     # Wracamy do zwracania czystego tekstu

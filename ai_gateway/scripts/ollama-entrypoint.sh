@@ -1,5 +1,4 @@
 #!/bin/sh
-# Startuje Ollamę w tle, pullsuje wymagany model, czeka na proces ollama.
 set -e
 
 MODEL="${OLLAMA_MODEL_NAME:-llama3.1:8b}"
@@ -8,7 +7,6 @@ MODEL="${OLLAMA_MODEL_NAME:-llama3.1:8b}"
 ollama serve &
 SERVER_PID=$!
 
-# Czekaj aż serwer odpowiada
 echo "[entrypoint] Czekam na Ollama API..."
 for i in $(seq 1 60); do
     if ollama list >/dev/null 2>&1; then
@@ -17,9 +15,7 @@ for i in $(seq 1 60); do
     sleep 1
 done
 
-# Pull modelu (idempotentne — ollama pomija jeśli już jest)
 echo "[entrypoint] Pull modelu: $MODEL"
-ollama pull "$MODEL" || echo "[entrypoint] OSTRZEŻENIE: pull modelu nie powiódł się (sprawdź sieć)"
+ollama pull "$MODEL" || echo "[entrypoint] OSTRZEZENIE: pull modelu nie powiodl sie"
 
-# Trzymaj proces serwera
 wait "$SERVER_PID"

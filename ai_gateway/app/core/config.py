@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     SMTP_TO: str = ""
     SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False  # SSL/TLS bezpośrednie (port 465)
 
     # ---------- Rate limiting ----------
     CHAT_RATE_LIMIT: str = "30/minute"
