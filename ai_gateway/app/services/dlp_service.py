@@ -12,7 +12,6 @@ import logging
 from typing import Any, Dict
 from uuid import UUID
 
-import redis.asyncio as redis_async
 from fastapi import BackgroundTasks
 from ollama import AsyncClient
 from pydantic import ValidationError
@@ -116,7 +115,6 @@ async def analyze_prompt(
     user_id: UUID,
     db: AsyncSession,
     bt: BackgroundTasks,
-    r: redis_async.Redis | None = None,
 ) -> str:
     """
     Główna funkcja warstwy DLP.
@@ -152,7 +150,7 @@ async def analyze_prompt(
     if dlp_result.is_safe:
         return prompt
 
-    # 4a. Naruszenie — log + alert
+# 4a. Naruszenie — log + alert
     sanitized = dlp_result.sanitized_text or "[REDACTED]"
     incident = await _record_incident(
         db=db,
@@ -164,16 +162,22 @@ async def analyze_prompt(
     # NIE logujemy oryginalnego promptu — tylko ID
     logger.info("DLP: zarejestrowano incydent id=%s", incident.id)
 
-    smtp_to_override: str | None = None
-    if r is not None:
-        smtp_to_override = await r.get("config:smtp_to")
-
     bt.add_task(
         mail_service.send_alert,
         incident_id=str(incident.id),
         user_id=str(user_id),
         reason=dlp_result.reason or "Brak uzasadnienia",
-        smtp_to_override=smtp_to_override,
     )
 
-    return sanitized
+    # --- NOWOŚĆ: Notatka systemowa dla modelu Claude ---
+    system_appendix = (
+        "\n\n[NOTATKA SYSTEMOWA DLP: Powyższa wiadomość użytkownika zawierała dane poufne "
+        "(np. dane osobowe, klucze API, kod źródłowy), które zostały automatycznie "
+        "usunięte lub zamaskowane gwiazdkami przez system bezpieczeństwa firmy. "
+        "Jako asystent AI, rozpocznij swoją odpowiedź od poinformowania użytkownika, "
+        "że jego wiadomość została ocenzurowana ze względów bezpieczeństwa, "
+        "a następnie postaraj się odpowiedzieć na jego pytanie najlepiej jak potrafisz "
+        "na podstawie pozostałego, bezpiecznego kontekstu.]"
+    )
+
+    return sanitized + system_appendix
