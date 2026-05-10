@@ -19,6 +19,7 @@ from app.core.rate_limit import limiter
 from app.core.security import hash_password
 from app.db.base import AsyncSessionLocal
 from app.models.user import User, UserRole
+from app.services import classifier_service, presidio_service
 
 logging.basicConfig(
     level=logging.INFO if not settings.DEBUG else logging.DEBUG,
@@ -63,6 +64,15 @@ async def lifespan(app: FastAPI):
         logger.warning(
             "Seed admina nie powiódł się (DB jeszcze niegotowa?): %s", exc
         )
+
+    # Pre-load modeli DLP (spaCy + klasyfikator) - inaczej pierwszy /chat ma kilkusekundowe opoznienie.
+    try:
+        presidio_service.warmup()
+        classifier_service.warmup()
+    except Exception as exc:  # noqa: BLE001
+        # Fail-closed dziala na poziomie requestu - tutaj tylko sygnal.
+        logger.error("Warmup DLP nie powiodl sie: %s", exc)
+
     yield
     logger.info("Zamykanie aplikacji")
 

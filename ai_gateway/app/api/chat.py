@@ -79,9 +79,7 @@ async def chat_completions(
         bt=background_tasks,
     )
 
-    # --- NOWA LOGIKA: Sprawdzamy, czy DLP coś ocenzurowało ---
-    system_prompt = None
-# --- NOWA LOGIKA: Ostry prompt dla modelu zewnętrznego (Claude) ---
+    # Jesli DLP cokolwiek zmienilo, doklejamy ostre instrukcje dla Claude.
     system_prompt = None
     if sanitized != original_prompt:
         system_prompt = (

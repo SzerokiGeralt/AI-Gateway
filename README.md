@@ -2,21 +2,35 @@
 
 ## Architektura
 
-AI Gateway to bramka pośrednicząca między UI chat a Anthropic API, wzbogacona o lokalną
-warstwę DLP. Każdy prompt zalogowanego użytkownika jest najpierw przepuszczany przez
-lokalny model Ollama, który ocenia go względem polityki firmy załadowanej przez admina.
+AI Gateway to bramka pośrednicząca między UI chat a Anthropic API, wzbogacona o **dwuwarstwową
+lokalną warstwę DLP**. Każdy prompt zalogowanego użytkownika jest analizowany w pełni lokalnie:
+
+1. **Warstwa 1 — deterministyczna**: Microsoft Presidio + polskie recognizery z walidacją sum
+   kontrolnych (PESEL, NIP, REGON, IBAN PL, dowód osobisty) + pakiet wzorców sekretów (klucze
+   AWS/GCP/OpenAI/Anthropic, tokeny GitHub/Slack, JWT, klucze prywatne, hasła w przypisaniach).
+   Wykryte fragmenty są podmieniane na placeholdery `[REDACTED:<TYP>]`.
+2. **Warstwa 2 — embedding similarity** (`sentence-transformers/paraphrase-multilingual-mpnet-base-v2`,
+   ~970 MB, CPU): liczy cosine similarity między promptem a etykietami zakazanych tematów
+   z polityki admina. Score > progu ⇒ cała wiadomość zastępowana placeholderem (block-all).
+   Deterministyczne, bez halucynacji modelu — jeśli prompt nie jest semantycznie blisko
+   żadnej etykiety, score wyjdzie niski.
+
 Wykryte naruszenia są logowane jako incydenty (z oryginalną treścią dostępną tylko w bazie),
 a do zespołu bezpieczeństwa idzie alert mailowy w tle. Bezpieczna wersja promptu trafia
 dalej streamem SSE do Anthropic Claude. Cała aplikacja stoi na FastAPI + SQLAlchemy 2.0
 async, sesje JWT są walidowane przez Redis (umożliwia twardy logout), a komponenty
-infrastrukturalne (PostgreSQL, Redis, Ollama) są w pełni skonteneryzowane.
+infrastrukturalne (PostgreSQL, Redis) są skonteneryzowane.
+
+Awaria którejkolwiek warstwy DLP skutkuje **fail-closed** — prompt zwraca HTTP 503,
+nigdy nie trafia niezweryfikowany do zewnętrznego API.
 
 ## Wymagania wstępne
 
 - Docker 24+ i Docker Compose v2
-- Wolne porty: **8000** (aplikacja); pozostałe usługi (db, redis, ollama) zostają w sieci wewnętrznej
+- Wolne porty: **8000** (aplikacja); pozostałe usługi (db, redis) zostają w sieci wewnętrznej
 - Klucz API do Anthropic (`sk-ant-...`)
-- ~5 GB miejsca na model Ollama (`llama3.1:8b`)
+- ~1.5 GB miejsca na modele DLP (`pl_core_news_md` + `paraphrase-multilingual-mpnet-base-v2`,
+  pre-pobierane w trakcie `docker compose build`)
 
 ## Quick start
 
@@ -46,8 +60,9 @@ Pierwsze konto administratora jest tworzone automatycznie przy pierwszym starcie
 logowaniu **zmień hasło** przez `PATCH /admin/users/{id}` lub załóż nowego admina i usuń
 seedowanego.
 
-Pull modelu Ollama (`llama3.1:8b`) odbywa się automatycznie przy pierwszym starcie kontenera
-`ollama` — może to potrwać kilka minut przy pierwszym `up`. Logi: `docker compose logs -f ollama`.
+Modele DLP (spaCy `pl_core_news_md` + `paraphrase-multilingual-mpnet-base-v2`) są pobierane jednorazowo
+podczas `docker compose build` (~1.5 GB). Pierwszy `up` jest dłuższy o czas warmupu modeli
+przy starcie aplikacji (~3–8 s).
 
 ## Endpointy API
 
@@ -69,18 +84,25 @@ Pełna interaktywna dokumentacja: `http://localhost:8000/docs`.
 
 ## Jak załadować politykę DLP
 
+Polityka jest plikiem markdown z **wymaganymi sekcjami**. Klasyfikator zero-shot bierze
+bullety z sekcji `# Tematy zabronione` jako etykiety NLI.
+
 ```bash
-# Plik tekstowy z polityką
-cat > company_policy.txt <<'EOF'
-Polityka bezpieczeństwa firmy ACME
-==================================
-1. Zabronione jest udostępnianie zewnętrznym systemom AI:
-   - numerów PESEL, NIP, dowodów osobistych
-   - danych klientów (imię + nazwisko + dane kontaktowe)
-   - kodu źródłowego oznaczonego jako CONFIDENTIAL
-   - planów strategicznych i finansowych przed publikacją
-2. Dozwolone są ogólne pytania techniczne, brainstorming,
-   pomoc w pisaniu nieobjętym tajemnicą.
+# Plik markdown z polityką
+cat > company_policy.md <<'EOF'
+# Tematy zabronione
+- numery PESEL, NIP, dowodów osobistych
+- dane klientów (imię + nazwisko + dane kontaktowe)
+- kod źródłowy oznaczony jako CONFIDENTIAL
+- plany strategiczne i finansowe przed publikacją
+
+# Tematy dozwolone
+- ogólne pytania techniczne
+- brainstorming
+- pomoc w pisaniu nieobjętym tajemnicą
+
+# Opis
+Polityka bezpieczeństwa firmy ACME — wersja 1.0.
 EOF
 
 # Uzyskaj token admina
@@ -89,12 +111,13 @@ TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
   -d '{"username":"admin","password":"ChangeMeNow!"}' \
   | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
 
-# Załaduj politykę
+# Załaduj politykę (.md lub .txt z markdown wewnątrz)
 curl -X POST http://localhost:8000/admin/policy \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@company_policy.txt"
+  -F "file=@company_policy.md"
 ```
 
+Walidacja: brak sekcji `# Tematy zabronione` z co najmniej jednym bulletem zwraca **HTTP 400**.
 Każdy nowy upload tworzy nowy rekord — system zawsze używa **najnowszej** wersji.
 
 ## Wysłanie testowego promptu
@@ -124,8 +147,8 @@ Odpowiedź to strumień SSE — fragmenty `data: ...` zakończone `data: [DONE]`
 | `REDIS_URL`              | URL Redis (`redis://host:port/db`)                         | `redis://redis:6379/0`           |
 | `ANTHROPIC_API_KEY`      | Klucz API Anthropic                                        | **wymagane**                     |
 | `ANTHROPIC_MODEL_NAME`   | Model Claude używany do odpowiedzi                         | `claude-sonnet-4-5`              |
-| `OLLAMA_HOST`            | Endpoint Ollamy                                            | `http://ollama:11434`            |
-| `OLLAMA_MODEL_NAME`      | Model do warstwy DLP                                       | `llama3.1:8b`                    |
+| `DLP_CLASSIFIER_MODEL`   | Encoder dla warstwy 2 (sentence-transformers)              | `sentence-transformers/paraphrase-multilingual-mpnet-base-v2` |
+| `DLP_CLASSIFIER_THRESHOLD` | Próg cosine similarity (0.0–1.0)                         | `0.55`                           |
 | `SMTP_HOST`              | Host SMTP do alertów (puste = wyłączone)                   | *(puste)*                        |
 | `SMTP_PORT`              | Port SMTP                                                  | `587`                            |
 | `SMTP_USER`              | Użytkownik SMTP                                            | *(puste)*                        |
@@ -151,10 +174,9 @@ ai_gateway/
 │   ├── db/               # baza, Alembic
 │   ├── models/           # SQLAlchemy ORM
 │   ├── schemas/          # Pydantic
-│   ├── services/         # dlp, llm, mail
+│   ├── services/         # dlp_service (orkiestrator), presidio_service,
+│   │                     # classifier_service, policy_parser, llm_service, mail_service
 │   └── main.py
-├── scripts/
-│   └── ollama-entrypoint.sh
 ├── alembic.ini
 ├── Dockerfile
 ├── docker-compose.yml
@@ -171,7 +193,10 @@ ai_gateway/
   ani do treści maili alertowych. Mail zawiera wyłącznie ID incydentu, ID użytkownika i powód.
 - Wszystkie usługi infrastrukturalne są w wewnętrznej sieci `gateway_net` — żaden serwis
   poza `app` nie eksponuje portów na host.
-- DLP działa w trybie **fail-open**: jeśli Ollama jest niedostępna lub zwróci nieparsowalny
-  JSON, prompt przechodzi nietknięty i logowane jest ostrzeżenie. To świadoma decyzja, żeby
-  awaria warstwy lokalnej nie blokowała pracy. Jeśli wolisz fail-closed, zmień zachowanie
-  w `app/services/dlp_service.py` (funkcja `analyze_prompt`).
+- DLP działa w trybie **fail-closed**: awaria Presidio lub klasyfikatora skutkuje
+  HTTP 503; prompt nigdy nie trafia niezweryfikowany do Anthropic. Brak załadowanej
+  polityki nie jest awarią — wyłącza tylko warstwę 2 (klasyfikator); warstwa 1
+  (Presidio: PII + sekrety) działa nadal.
+- Dwuetapowa decyzja: naruszenie tematyczne ⇒ cała wiadomość zastąpiona; tylko PII/sekrety
+  ⇒ punktowa redakcja `[REDACTED:<TYP>]`; oryginał zachowany **wyłącznie** w bazie
+  (`security_incidents`) — nigdy nie trafia do logów ani maili.

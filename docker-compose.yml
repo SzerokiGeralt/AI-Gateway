@@ -11,14 +11,11 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-gateway}:${POSTGRES_PASSWORD:-gateway_secret_change_me}@db:5432/${POSTGRES_DB:-ai_gateway}
       REDIS_URL: redis://redis:6379/0
-      OLLAMA_HOST: http://ollama:11434
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-      ollama:
-        condition: service_started
     ports:
       - "${APP_PORT:-8000}:8000"
     networks:
@@ -57,19 +54,6 @@ services:
     networks:
       - gateway_net
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ai_gateway_ollama
-    restart: unless-stopped
-    volumes:
-      - ollama_models:/root/.ollama
-      - ./ai_gateway/scripts/ollama-entrypoint.sh:/entrypoint.sh:ro
-    environment:
-      OLLAMA_MODEL_NAME: ${OLLAMA_MODEL_NAME:-llama3.1:8b}
-    entrypoint: ["/bin/sh", "/entrypoint.sh"]
-    networks:
-      - gateway_net
-
   frontend:
     build:
       context: frontend
@@ -86,7 +70,6 @@ services:
 volumes:
   pgdata:
   redisdata:
-  ollama_models:
 
 networks:
   gateway_net:

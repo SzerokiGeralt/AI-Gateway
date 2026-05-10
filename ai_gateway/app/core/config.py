@@ -37,9 +37,11 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str
     ANTHROPIC_MODEL_NAME: str = "claude-sonnet-4-5"
 
-    # ---------- Ollama ----------
-    OLLAMA_HOST: str = "http://ollama:11434"
-    OLLAMA_MODEL_NAME: str = "llama3.1:8b"
+    # ---------- DLP ----------
+    # mpnet (768-dim) daje lepszy contrast niz MiniLM (384-dim) dla polskich tekstow.
+    DLP_CLASSIFIER_MODEL: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+    # cosine similarity, 0.55 = umiarkowane semantyczne dopasowanie
+    DLP_CLASSIFIER_THRESHOLD: float = 0.55
 
     # ---------- SMTP ----------
     SMTP_HOST: str = ""

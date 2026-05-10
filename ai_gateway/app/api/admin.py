@@ -32,6 +32,8 @@ from app.schemas.admin import (
     UserOut,
     UserUpdate,
 )
+from app.services.policy_parser import PolicyParseError
+from app.services.policy_parser import parse as parse_policy
 
 router = APIRouter(
     prefix="/admin",
@@ -143,13 +145,20 @@ async def upload_policy(
     current_admin: User = Depends(require_admin),
 ) -> CompanyPolicy:
     """
-    Przyjmuje plik .txt (multipart/form-data, pole `file`) i zapisuje
-    jego treść jako nową aktywną politykę firmową.
+    Przyjmuje plik markdown (multipart/form-data, pole `file`, .md lub .txt).
+
+    Wymagany format - sekcje markdown:
+      # Tematy zabronione
+      - bullet 1
+      - bullet 2
+      # Tematy dozwolone   (opcjonalnie)
+      - ...
+      # Opis               (opcjonalnie)
     """
-    if not file.filename or not file.filename.lower().endswith(".txt"):
+    if not file.filename or not file.filename.lower().endswith((".md", ".txt")):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Wymagany plik .txt",
+            detail="Wymagany plik .md lub .txt z sekcjami markdown",
         )
 
     raw = await file.read()
@@ -165,6 +174,14 @@ async def upload_policy(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Plik polityki jest pusty",
+        )
+
+    try:
+        parse_policy(content)
+    except PolicyParseError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
         )
 
     policy = CompanyPolicy(content=content, uploaded_by=current_admin.id)
