@@ -1,8 +1,8 @@
-# AI Gateway
+# Big Brother Proxy
 
 ## Architektura
 
-AI Gateway to bramka pośrednicząca między UI chat a Anthropic API, wzbogacona o **dwuwarstwową
+Big Brother Proxy to bramka pośrednicząca między UI chat a Anthropic API, wzbogacona o **dwuwarstwową
 lokalną warstwę DLP**. Każdy prompt zalogowanego użytkownika jest analizowany w pełni lokalnie:
 
 1. **Warstwa 1 — deterministyczna**: Microsoft Presidio + polskie recognizery z walidacją sum
@@ -148,7 +148,7 @@ Odpowiedź to strumień SSE — fragmenty `data: ...` zakończone `data: [DONE]`
 
 | Nazwa                    | Opis                                                       | Default                          |
 |--------------------------|------------------------------------------------------------|----------------------------------|
-| `APP_NAME`               | Nazwa aplikacji wyświetlana w `/health`                    | `AI Gateway`                     |
+| `APP_NAME`               | Nazwa aplikacji wyświetlana w `/health`                    | `Big Brother Proxy`              |
 | `APP_ENV`                | Środowisko (`development` / `production`)                  | `development`                    |
 | `DEBUG`                  | Tryb debug + verbose SQL log                               | `false`                          |
 | `ALLOWED_ORIGINS`        | Lista origins CORS (po przecinku)                          | `http://localhost:3000`          |

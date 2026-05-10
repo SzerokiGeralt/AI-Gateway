@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     )
 
     # ---------- Aplikacja ----------
-    APP_NAME: str = "AI Gateway"
+    APP_NAME: str = "Big Brother Proxy"
     APP_ENV: str = "development"
     DEBUG: bool = False
     ALLOWED_ORIGINS: str = "http://localhost:3000"

@@ -31,7 +31,7 @@ async def send_alert(
     msg = EmailMessage()
     msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
     msg["To"] = smtp_to
-    msg["Subject"] = f"[AI Gateway] Incydent DLP {incident_id}"
+    msg["Subject"] = f"[Big Brother Proxy] Incydent DLP {incident_id}"
     msg.set_content(
         "Wykryto naruszenie polityki DLP.\n\n"
         f"ID incydentu: {incident_id}\n"

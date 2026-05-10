@@ -913,7 +913,7 @@ export default function Admin() {
       {/* Sidebar */}
       <aside className="w-60 bg-[#171717] flex flex-col flex-shrink-0">
         <div className="p-4 border-b border-white/10">
-          <h1 className="text-sm font-semibold text-white">AI Gateway</h1>
+          <h1 className="text-sm font-semibold text-white">Big Brother Proxy</h1>
           <p className="text-xs text-amber-400 mt-0.5">Panel Administratora</p>
         </div>
 

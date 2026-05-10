@@ -50,7 +50,7 @@ function Message({ msg, isStreaming }) {
         {isUser ? <UserIcon /> : <BotIcon />}
         <div className="flex-1 min-w-0 pt-1">
           <p className={`text-sm font-semibold mb-1 ${isUser ? 'text-gray-300' : 'text-white'}`}>
-            {isUser ? 'Ty' : 'AI Gateway'}
+            {isUser ? 'Ty' : 'Big Brother Proxy'}
           </p>
           {isUser ? (
             <div className="message-content text-[15px] leading-relaxed text-gray-100">

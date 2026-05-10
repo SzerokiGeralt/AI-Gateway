@@ -1,4 +1,4 @@
-# Technologie w AI Gateway — tłumaczenie po ludzku
+# Technologie w Big Brother Proxy — tłumaczenie po ludzku
 
 Ten dokument tłumaczy wszystkie biblioteki, frameworki i modele, których używamy
 w projekcie. Każda sekcja odpowiada na pytania: **co to jest, dlaczego tego użyliśmy,
@@ -10,7 +10,7 @@ co by się stało gdyby tego nie było**.
 
 Pani Kasia z księgowości chce zapytać AI o coś przydatnego, ale przyzwyczaiła się
 do publicznego ChatGPT i wkleja tam dane klientów. Tego nie wolno robić, bo to
-łamie politykę firmy i RODO. AI Gateway stoi pomiędzy nią a publicznym AI:
+łamie politykę firmy i RODO. Big Brother Proxy stoi pomiędzy nią a publicznym AI:
 przepuszcza pytanie najpierw przez **dwie lokalne warstwy bezpieczeństwa**,
 które wycinają lub blokują wrażliwe dane, a dopiero potem (jeśli jest czysto)
 wysyła pytanie do Anthropic Claude. Wszystko jest spakowane w Dockerze i działa
