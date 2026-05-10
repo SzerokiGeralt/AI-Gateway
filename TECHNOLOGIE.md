@@ -302,9 +302,9 @@ przy 0.65 zbyt liberalny (puszczał subtelne naruszenia).
 Krok po kroku, co się dzieje od momentu, kiedy admin wgrywa politykę,
 do momentu, kiedy użytkownik dostaje (albo nie dostaje) odpowiedź.
 
-**Krok 1 — Admin wgrywa politykę markdown**
+**Krok 1 — Admin wgrywa politykę jako policy.txt**
 
-Admin robi `POST /admin/policy` z plikiem `policy.md`:
+Admin robi `POST /admin/policy` z plikiem `policy.txt` (format markdown w środku):
 
 ```markdown
 # Tematy zabronione

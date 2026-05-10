@@ -84,12 +84,24 @@ Pełna interaktywna dokumentacja: `http://localhost:8000/docs`.
 
 ## Jak załadować politykę DLP
 
-Polityka jest plikiem markdown z **wymaganymi sekcjami**. Klasyfikator zero-shot bierze
+Polityka jest plikiem markdown zapisanym jako `.txt` z **wymaganymi sekcjami**. Klasyfikator zero-shot bierze
 bullety z sekcji `# Tematy zabronione` jako etykiety NLI.
 
+**Wzor pliku policy.txt**
+- Sekcje to naglowki markdown (`# ...`).
+- Lista tematow to bullety (`- ...`).
+- Wymagana jest sekcja `# Tematy zabronione` z co najmniej jednym bullet pointem.
+- Sekcje `# Tematy dozwolone` i `# Opis` sa opcjonalne.
+
+**Jak dziala parsowanie**
+- Parser rozpoznaje naglowki po slowach kluczowych (np. `zabronione`, `dozwolone`, `allowed`, `forbidden`).
+- Bullety pod `# Tematy zabronione` trafiaja do listy zakazanych tematow.
+- Bullety pod `# Tematy dozwolone` sa zapisywane, ale obecnie nie wplywaja na decyzje DLP.
+- Tresc poza sekcjami trafia do opisu (informacyjnie).
+
 ```bash
-# Plik markdown z polityką
-cat > company_policy.md <<'EOF'
+# Plik markdown z polityką zapisany jako .txt
+cat > company_policy.txt <<'EOF'
 # Tematy zabronione
 - numery PESEL, NIP, dowodów osobistych
 - dane klientów (imię + nazwisko + dane kontaktowe)
@@ -111,10 +123,10 @@ TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
   -d '{"username":"admin","password":"ChangeMeNow!"}' \
   | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
 
-# Załaduj politykę (.md lub .txt z markdown wewnątrz)
+# Załaduj politykę (.txt z markdown wewnątrz)
 curl -X POST http://localhost:8000/admin/policy \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@company_policy.md"
+  -F "file=@company_policy.txt"
 ```
 
 Walidacja: brak sekcji `# Tematy zabronione` z co najmniej jednym bulletem zwraca **HTTP 400**.
