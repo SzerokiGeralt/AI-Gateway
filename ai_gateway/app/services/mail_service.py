@@ -14,12 +14,13 @@ logger = logging.getLogger(__name__)
 async def send_alert(
     incident_id: str,
     user_id: str,
+    username: str | None,
     reason: str,
     smtp_to_override: str | None = None,
 ) -> None:
     """
     Wysyła krótki email-alert do zespołu bezpieczeństwa.
-    NIE zawiera oryginalnego promptu — tylko ID incydentu i powód.
+    NIE zawiera oryginalnego promptu — tylko ID incydentu, login i powód.
     smtp_to_override — adres ustawiony przez admina w UI (z Redis); fallback na settings.SMTP_TO.
     """
     smtp_to = smtp_to_override or settings.SMTP_TO
@@ -35,6 +36,7 @@ async def send_alert(
         "Wykryto naruszenie polityki DLP.\n\n"
         f"ID incydentu: {incident_id}\n"
         f"User ID:      {user_id}\n"
+        f"Login:        {username or '—'}\n"
         f"Powód:        {reason}\n\n"
         "Szczegóły dostępne w panelu administracyjnym (/admin/incidents).\n"
         "Oryginalny prompt nie jest przesyłany mailem ze względów bezpieczeństwa.\n"

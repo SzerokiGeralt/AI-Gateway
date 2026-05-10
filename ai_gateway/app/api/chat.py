@@ -85,6 +85,7 @@ async def chat_completions(
     sanitized = await dlp_service.analyze_prompt(
         prompt=original_prompt,
         user_id=current_user.id,
+        username=current_user.username,
         db=db,
         bt=background_tasks,
         smtp_to_override=smtp_to_override or None,
@@ -199,6 +200,7 @@ async def analyze_file(
     sanitized = await dlp_service.analyze_prompt(
         prompt=text,
         user_id=current_user.id,
+        username=current_user.username,
         db=db,
         bt=background_tasks,
         smtp_to_override=smtp_to_override or None,

@@ -1,8 +1,11 @@
 import api from './api'
 
 export const adminApi = {
-  getUsers: (skip = 0, limit = 100) =>
-    api.get('/admin/users', { params: { skip, limit } }).then(r => r.data),
+  getUsers: (skip = 0, limit = 100, query) => {
+    const params = { skip, limit }
+    if (query) params.q = query
+    return api.get('/admin/users', { params }).then(r => r.data)
+  },
 
   createUser: (payload) =>
     api.post('/admin/users', payload).then(r => r.data),

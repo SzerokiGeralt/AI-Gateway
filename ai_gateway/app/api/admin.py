@@ -13,7 +13,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from sqlalchemy import delete, select
+from sqlalchemy import String, cast, delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,10 +50,27 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
+    user_id: UUID | None = Query(None, description="Filter by user id"),
+    q: str | None = Query(None, description="Search by user id or username"),
 ) -> List[User]:
-    result = await db.execute(
-        select(User).order_by(User.created_at.desc()).offset(skip).limit(limit)
-    )
+    stmt = select(User)
+    if user_id:
+        stmt = stmt.where(User.id == user_id)
+    elif q:
+        q = q.strip()
+        if q:
+            try:
+                stmt = stmt.where(User.id == UUID(q))
+            except ValueError:
+                like = f"%{q}%"
+                stmt = stmt.where(
+                    or_(
+                        User.username.ilike(like),
+                        cast(User.id, String).ilike(like),
+                    )
+                )
+    stmt = stmt.order_by(User.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(stmt)
     return list(result.scalars().all())
 
 

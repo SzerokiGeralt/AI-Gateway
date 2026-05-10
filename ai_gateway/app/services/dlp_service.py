@@ -70,6 +70,7 @@ def _fail_closed(detail: str = "Bledna warstwa DLP - prompt nie zostal zweryfiko
 async def analyze_prompt(
     prompt: str,
     user_id: UUID,
+    username: str | None,
     db: AsyncSession,
     bt: BackgroundTasks,
     smtp_to_override: str | None = None,
@@ -147,6 +148,7 @@ async def analyze_prompt(
         mail_service.send_alert,
         incident_id=str(incident.id),
         user_id=str(user_id),
+        username=username,
         reason=reason,
         smtp_to_override=smtp_to_override,
     )

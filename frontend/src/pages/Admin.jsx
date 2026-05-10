@@ -132,16 +132,41 @@ function UsersPanel({ currentUser }) {
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [userIdQuery, setUserIdQuery] = useState('')
+  const [searchError, setSearchError] = useState('')
 
-  const load = useCallback(() => {
+  const load = useCallback((userId) => {
     setLoading(true)
-    adminApi.getUsers()
+    setSearchError('')
+    adminApi.getUsers(0, 100, userId)
       .then(setUsers)
-      .catch(() => {})
+      .catch((err) => {
+        if (userId) {
+          const status = err?.response?.status
+          if (status === 422) {
+            setSearchError('Nieprawidłowy format ID (UUID).')
+          } else {
+            setSearchError(err?.response?.data?.detail || 'Błąd podczas wyszukiwania użytkownika.')
+          }
+          setUsers([])
+        }
+      })
       .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    const trimmed = userIdQuery.trim()
+    load(trimmed || undefined)
+  }
+
+  const handleClearSearch = () => {
+    setUserIdQuery('')
+    setSearchError('')
+    load()
+  }
 
   const handleCreate = async (form) => {
     setFormLoading(true)
@@ -215,17 +240,47 @@ function UsersPanel({ currentUser }) {
           <h2 className="text-lg font-semibold text-white">Użytkownicy</h2>
           <p className="text-sm text-gray-500 mt-0.5">{users.length} kont w systemie</p>
         </div>
-        <button
-          onClick={() => { setCreateOpen(true); setFormError('') }}
-          className="flex items-center gap-2 bg-white text-[#212121] font-semibold text-sm rounded-lg px-4 py-2
-                     hover:bg-gray-100 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Dodaj użytkownika
-        </button>
+        <div className="flex items-center gap-3">
+          <form onSubmit={handleSearch} className="flex items-center gap-2">
+            <input
+              value={userIdQuery}
+              onChange={e => setUserIdQuery(e.target.value)}
+              placeholder="Szukaj po UUID lub loginie"
+              className="w-64 bg-[#212121] border border-white/10 rounded-lg px-3 py-2 text-sm text-white
+                         placeholder-gray-500 focus:outline-none focus:border-white/30 transition-colors"
+            />
+            <button
+              type="submit"
+              className="bg-white/10 text-white text-sm rounded-lg px-3 py-2 hover:bg-white/20 transition-colors"
+            >
+              Szukaj
+            </button>
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="bg-white/5 text-gray-300 text-sm rounded-lg px-3 py-2 hover:bg-white/10 transition-colors"
+            >
+              Wyczyść
+            </button>
+          </form>
+          <button
+            onClick={() => { setCreateOpen(true); setFormError('') }}
+            className="flex items-center gap-2 bg-white text-[#212121] font-semibold text-sm rounded-lg px-4 py-2
+                       hover:bg-gray-100 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Dodaj użytkownika
+          </button>
+        </div>
       </div>
+
+      {searchError && (
+        <div className="mb-4 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-sm text-red-400">
+          {searchError}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-16"><Spinner /></div>
@@ -251,7 +306,7 @@ function UsersPanel({ currentUser }) {
                       </div>
                       <div>
                         <p className="text-white font-medium">{u.username}</p>
-                        <p className="text-gray-500 text-xs font-mono">{u.id.slice(0, 8)}…</p>
+                        <p className="text-gray-500 text-xs font-mono break-all">{u.id}</p>
                       </div>
                     </div>
                   </td>
@@ -355,7 +410,8 @@ function UsersPanel({ currentUser }) {
 
 function IncidentRow({ inc, users, onDelete }) {
   const [expanded, setExpanded] = useState(false)
-  const username = users?.[inc.user_id] || inc.user_id?.slice(0, 8) + '…'
+  const username = users?.[inc.user_id] || '—'
+  const userIdFull = inc.user_id || '—'
 
   return (
     <>
@@ -365,7 +421,8 @@ function IncidentRow({ inc, users, onDelete }) {
       >
         <td className="px-4 py-3 text-gray-400 text-xs">{fmtDate(inc.created_at)}</td>
         <td className="px-4 py-3">
-          <span className="text-gray-300 font-mono text-xs">{username}</span>
+          <span className="text-gray-300 font-mono text-xs break-all">{userIdFull}</span>
+          <span className="text-gray-500 text-xs"> ({username})</span>
         </td>
         <td className="px-4 py-3">
           <span className="text-red-400 text-sm line-clamp-1">{inc.reason}</span>
@@ -398,6 +455,14 @@ function IncidentRow({ inc, users, onDelete }) {
         <tr className="bg-[#1a1a1a]">
           <td colSpan={6} className="px-6 py-4">
             <div className="grid grid-cols-1 gap-4 text-sm">
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">ID incydentu</p>
+                <p className="text-gray-300 font-mono text-xs break-all">{inc.id}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">ID uzytkownika</p>
+                <p className="text-gray-300 font-mono text-xs break-all">{userIdFull}</p>
+              </div>
               <div>
                 <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Oryginalny prompt</p>
                 <p className="text-gray-300 bg-red-500/5 border border-red-500/20 rounded-lg p-3 message-content">
