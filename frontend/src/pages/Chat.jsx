@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useAuth } from '../context/AuthContext'
 import { streamChat } from '../services/api'
 
@@ -24,8 +26,24 @@ function BotIcon() {
   )
 }
 
+const THINKING_PHRASES = ['Myślę…', 'Analizuję…', 'Sprawdzam…', 'Przygotowuję odpowiedź…']
+
+function ThinkingIndicator() {
+  const [phase, setPhase] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setPhase(p => (p + 1) % THINKING_PHRASES.length), 1500)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <span className="text-gray-400 italic text-[15px] transition-all duration-300">
+      {THINKING_PHRASES[phase]}
+    </span>
+  )
+}
+
 function Message({ msg, isStreaming }) {
   const isUser = msg.role === 'user'
+  const showThinking = !isUser && isStreaming && !msg.content
   return (
     <div className={`py-5 px-4 ${isUser ? '' : 'bg-[#2a2a2a]'}`}>
       <div className="max-w-3xl mx-auto flex gap-4">
@@ -34,9 +52,21 @@ function Message({ msg, isStreaming }) {
           <p className={`text-sm font-semibold mb-1 ${isUser ? 'text-gray-300' : 'text-white'}`}>
             {isUser ? 'Ty' : 'AI Gateway'}
           </p>
-          <div className={`message-content text-[15px] leading-relaxed text-gray-100 ${isStreaming ? 'streaming-cursor' : ''}`}>
-            {msg.content || (isStreaming ? '' : <span className="text-gray-500 italic">Brak treści</span>)}
-          </div>
+          {isUser ? (
+            <div className="message-content text-[15px] leading-relaxed text-gray-100">
+              {msg.content || <span className="text-gray-500 italic">Brak treści</span>}
+            </div>
+          ) : showThinking ? (
+            <ThinkingIndicator />
+          ) : (
+            <div className={`markdown-content text-[15px] text-gray-100 ${isStreaming ? 'streaming-cursor' : ''}`}>
+              {msg.content ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+              ) : (
+                <span className="text-gray-500 italic">Brak treści</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -45,7 +75,7 @@ function Message({ msg, isStreaming }) {
 
 function EmptyState() {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
+    <div className="flex flex-col items-center justify-center text-center px-4">
       <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mb-4">
         <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -206,12 +236,15 @@ export default function Chat() {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        {messages.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <EmptyState />
+          </div>
+        )}
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
-          {messages.length === 0 ? (
-            <EmptyState />
-          ) : (
+          {messages.length > 0 && (
             <div>
               {messages.map((msg, i) => (
                 <Message
@@ -247,10 +280,11 @@ export default function Chat() {
                 rows={1}
                 placeholder="Wyślij wiadomość…"
                 className="w-full bg-transparent text-white placeholder-gray-500 resize-none
-                           px-4 py-3.5 pr-14 text-[15px] leading-relaxed
+                           px-4 py-3.5 pr-24 text-[15px] leading-relaxed
                            focus:outline-none disabled:opacity-50"
                 style={{ maxHeight: '200px', overflowY: 'auto' }}
               />
+              {/* Przycisk wyślij */}
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || isStreaming}

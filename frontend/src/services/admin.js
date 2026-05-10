@@ -38,4 +38,16 @@ export const adminApi = {
 
   setSmtpTo: (smtp_to) =>
     api.put('/admin/config/smtp-to', { smtp_to }).then(r => r.data),
+
+  downloadPolicy: () =>
+    api.get('/admin/policy/download', { responseType: 'blob' }).then(res => {
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/plain' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'dlp_policy.txt'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }),
 }

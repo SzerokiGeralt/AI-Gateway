@@ -33,6 +33,17 @@ function Spinner() {
 
 const EMPTY_USER_FORM = { username: '', password: '', role: 'USER', department: '' }
 
+const formatValidationErrors = (detail) => {
+  if (!Array.isArray(detail)) return null
+  return detail.map(d => {
+    const loc = Array.isArray(d.loc) ? d.loc : []
+    const isPassword = loc.includes('password')
+    const isTooShort = typeof d.type === 'string' && d.type.includes('string_too_short')
+    if (isPassword && isTooShort) return 'Hasło musi mieć co najmniej 8 znaków.'
+    return d.msg
+  }).join(', ')
+}
+
 function UserForm({ initial, onSubmit, loading, error, isEdit }) {
   const [form, setForm] = useState(initial || EMPTY_USER_FORM)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -147,8 +158,9 @@ function UsersPanel({ currentUser }) {
       load()
     } catch (err) {
       const detail = err?.response?.data?.detail
-      if (Array.isArray(detail)) {
-        setFormError(detail.map(d => d.msg).join(', '))
+      const validationError = formatValidationErrors(detail)
+      if (validationError) {
+        setFormError(validationError)
       } else {
         setFormError(typeof detail === 'string' ? detail : 'Błąd podczas tworzenia użytkownika.')
       }
@@ -171,7 +183,12 @@ function UsersPanel({ currentUser }) {
       load()
     } catch (err) {
       const detail = err?.response?.data?.detail
-      setFormError(typeof detail === 'string' ? detail : 'Błąd podczas edycji.')
+      const validationError = formatValidationErrors(detail)
+      if (validationError) {
+        setFormError(validationError)
+      } else {
+        setFormError(typeof detail === 'string' ? detail : 'Błąd podczas edycji.')
+      }
     } finally {
       setFormLoading(false)
     }
@@ -523,7 +540,9 @@ function PolicyPanel() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
-  const [currentPolicy, setCurrentPolicy] = useState(undefined) // undefined = loading
+  const [currentPolicy, setCurrentPolicy] = useState(undefined)
+  const [showContent, setShowContent] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     adminApi.getPolicy()
@@ -542,10 +561,22 @@ function PolicyPanel() {
       setResult(data)
       setCurrentPolicy(data)
       setFile(null)
+      setShowContent(false)
     } catch (err) {
       setError(err?.response?.data?.detail || 'Błąd podczas przesyłania pliku.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      await adminApi.downloadPolicy()
+    } catch {
+      alert('Błąd podczas pobierania polityki.')
+    } finally {
+      setDownloading(false)
     }
   }
 
@@ -564,13 +595,41 @@ function PolicyPanel() {
             <span>Sprawdzanie statusu polityki…</span>
           </div>
         ) : currentPolicy ? (
-          <div className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-2">
-            <svg className="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-sm text-green-400">
-              Ostatnia aktualizacja: <span className="font-semibold">{fmtDate(currentPolicy.updated_at)}</span>
-            </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-2">
+              <svg className="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-sm text-green-400">
+                Ostatnia aktualizacja: <span className="font-semibold">{fmtDate(currentPolicy.updated_at)}</span>
+              </span>
+            </div>
+            <button
+              onClick={() => setShowContent(v => !v)}
+              className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors
+                         bg-white/5 border border-white/10 rounded-lg px-3 py-2 hover:bg-white/10"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              {showContent ? 'Ukryj treść' : 'Podgląd polityki'}
+            </button>
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors
+                         bg-white/5 border border-white/10 rounded-lg px-3 py-2 hover:bg-white/10
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {downloading ? <Spinner /> : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              )}
+              Pobierz .txt
+            </button>
           </div>
         ) : (
           <div className="inline-flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-2">
@@ -581,6 +640,17 @@ function PolicyPanel() {
           </div>
         )}
       </div>
+
+      {/* Podgląd treści polityki */}
+      {showContent && currentPolicy?.content && (
+        <div className="mb-6">
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Treść aktywnej polityki</p>
+          <pre className="bg-[#111] border border-white/10 rounded-xl p-4 text-sm text-gray-300
+                          whitespace-pre-wrap word-break break-word overflow-y-auto max-h-96 leading-relaxed font-mono">
+            {currentPolicy.content}
+          </pre>
+        </div>
+      )}
 
       <div className="max-w-lg">
         <form onSubmit={handleUpload} className="space-y-4">
@@ -636,6 +706,7 @@ function PolicyPanel() {
 
 function EmailConfigPanel() {
   const [email, setEmail] = useState('')
+  const [currentEmail, setCurrentEmail] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -643,7 +714,11 @@ function EmailConfigPanel() {
 
   useEffect(() => {
     adminApi.getSmtpTo()
-      .then(data => setEmail(data.smtp_to || ''))
+      .then(data => {
+        const smtpTo = data.smtp_to || ''
+        setEmail(smtpTo)
+        setCurrentEmail(smtpTo)
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
@@ -656,6 +731,7 @@ function EmailConfigPanel() {
     try {
       await adminApi.setSmtpTo(email)
       setSuccess(true)
+      setCurrentEmail(email)
       setTimeout(() => setSuccess(false), 4000)
     } catch (err) {
       const detail = err?.response?.data?.detail
@@ -671,6 +747,8 @@ function EmailConfigPanel() {
 
   const inputCls = `w-full bg-[#212121] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white
     placeholder-gray-500 focus:outline-none focus:border-white/30 transition-colors`
+  const normalizedCurrentEmail = currentEmail.trim()
+  const hasCurrentEmail = normalizedCurrentEmail.length > 0
 
   return (
     <div>
@@ -686,6 +764,23 @@ function EmailConfigPanel() {
         ) : (
           <form onSubmit={handleSave} className="space-y-4">
             <div>
+              {hasCurrentEmail ? (
+                <div className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-1.5 mb-2">
+                  <svg className="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-xs text-green-400">
+                    Aktualnie ustawiony: <span className="font-semibold">{normalizedCurrentEmail}</span>
+                  </span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-1.5 mb-2">
+                  <svg className="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                  <span className="text-xs text-red-400">Nie ustawiono jeszcze żadnego maila</span>
+                </div>
+              )}
               <label className="block text-xs text-gray-400 mb-1.5">Adres email odbiorcy alertów DLP</label>
               <input
                 type="email"

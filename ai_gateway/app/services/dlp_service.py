@@ -72,6 +72,7 @@ async def analyze_prompt(
     user_id: UUID,
     db: AsyncSession,
     bt: BackgroundTasks,
+    smtp_to_override: str | None = None,
 ) -> str:
     """
     Glowna funkcja warstwy DLP. Zwraca prompt (lub jego zsanityzowana wersje).
@@ -147,6 +148,7 @@ async def analyze_prompt(
         incident_id=str(incident.id),
         user_id=str(user_id),
         reason=reason,
+        smtp_to_override=smtp_to_override,
     )
 
     return sanitized

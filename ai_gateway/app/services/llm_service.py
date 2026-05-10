@@ -1,6 +1,7 @@
 """Streaming odpowiedzi z Anthropic Claude API w formacie SSE."""
 from __future__ import annotations
 
+import json
 import logging
 from typing import AsyncGenerator, Dict, List
 
@@ -21,13 +22,8 @@ def _get_client() -> AsyncAnthropic:
 
 
 def _to_sse(text: str) -> str:
-    """
-    Pakuje fragment tekstu w event SSE.
-    Każda linia tekstu staje się osobną linią `data:`,
-    co jest poprawnym formatem SSE dla treści wieloliniowych.
-    """
-    lines = text.split("\n")
-    return "".join(f"data: {line}\n" for line in lines) + "\n"
+    """Pakuje fragment tekstu w event SSE jako JSON — unika problemów z wieloliniowymi fragmentami."""
+    return f"data: {json.dumps(text)}\n\n"
 
 
 async def stream_response(

@@ -40,16 +40,23 @@ async def send_alert(
         "Oryginalny prompt nie jest przesyłany mailem ze względów bezpieczeństwa.\n"
     )
 
+    send_kwargs: dict = {
+        "hostname": settings.SMTP_HOST,
+        "port": settings.SMTP_PORT,
+        "username": settings.SMTP_USER or None,
+        "password": settings.SMTP_PASSWORD or None,
+        "timeout": 15,
+    }
+    if settings.SMTP_USE_SSL:
+        send_kwargs["use_tls"] = True
+    elif settings.SMTP_USE_TLS:
+        send_kwargs["start_tls"] = True
+
     try:
-        await aiosmtplib.send(
-            msg,
-            hostname=settings.SMTP_HOST,
-            port=settings.SMTP_PORT,
-            username=settings.SMTP_USER or None,
-            password=settings.SMTP_PASSWORD or None,
-            start_tls=settings.SMTP_USE_TLS,
-            timeout=15,
-        )
+        await aiosmtplib.send(msg, **send_kwargs)
         logger.info("Wysłano alert email dla incydentu %s", incident_id)
     except Exception as exc:  # noqa: BLE001
-        logger.error("Nie udało się wysłać alertu email: %s", exc)
+        logger.error(
+            "Nie udało się wysłać alertu email dla incydentu %s: %s: %s",
+            incident_id, type(exc).__name__, exc,
+        )

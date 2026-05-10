@@ -138,6 +138,24 @@ async def get_current_policy(
     return policy
 
 
+@router.get("/policy/download")
+async def download_policy(
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Pobiera aktualną politykę DLP jako plik .txt."""
+    result = await db.execute(
+        select(CompanyPolicy).order_by(CompanyPolicy.updated_at.desc()).limit(1)
+    )
+    policy = result.scalar_one_or_none()
+    if policy is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brak polityki")
+    return Response(
+        content=policy.content.encode("utf-8"),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="dlp_policy.txt"'},
+    )
+
+
 @router.post("/policy", response_model=PolicyOut, status_code=status.HTTP_201_CREATED)
 async def upload_policy(
     file: UploadFile = File(...),
